@@ -3,8 +3,11 @@ package com.example.keith.mymaps;
 import android.app.Dialog;
 import android.location.Address;
 import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationListener;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.Toolbar;
@@ -17,22 +20,34 @@ import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.api.Api;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.Status;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks,GoogleApiClient.OnConnectionFailedListener{
 
     GoogleMap mMap;
     private static final int ERROR_DIALOG_REQUEST = 9001;
     private static final double
             IADT_LAT = 53.280349,
             IADT_LNG = -6.153121;
+
+    private GoogleApiClient mLocationClient;
+    private com.google.android.gms.location.LocationListener mListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,8 +70,18 @@ public class MainActivity extends AppCompatActivity {
             setContentView(R.layout.activity_map);
 
             if (initMap()) {
-                Toast.makeText(this, "Ready to map!", Toast.LENGTH_SHORT).show();
-                gotoLocation(IADT_LAT, IADT_LNG, 10);
+
+                gotoLocation(IADT_LAT, IADT_LNG, 15);
+
+                mLocationClient = new GoogleApiClient.Builder(this)
+                        .addApi(LocationServices.API)
+                        .addConnectionCallbacks(this)
+                        .addOnConnectionFailedListener(this)
+                        .build();
+
+                mLocationClient.connect();
+
+                //mMap.setMyLocationEnabled(true);
             } else {
                 Toast.makeText(this, "Map not connected!", Toast.LENGTH_SHORT).show();
             }
@@ -159,9 +184,57 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void showCurrentLocation(MenuItem item) {
-
-
+        Location currentLocation = LocationServices.FusedLocationApi
+                .getLastLocation(mLocationClient);
+        if (currentLocation == null) {
+            Toast.makeText(this, "Couldn't connect!", Toast.LENGTH_SHORT).show();
+        } else {
+            LatLng latLng = new LatLng(
+                    currentLocation.getLatitude(),
+                    currentLocation.getLongitude()
+            );
+            CameraUpdate update = CameraUpdateFactory.newLatLngZoom(latLng, 15);
+            mMap.animateCamera(update);
+        }
 
     }
 
+    @Override
+    public void onConnected(Bundle bundle) {
+        Toast.makeText(this, "Ready to map!", Toast.LENGTH_SHORT).show();
+
+        mListener = new com.google.android.gms.location.LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                Toast.makeText(MainActivity.this, "Location changed:" + location.getLatitude() + ", " + location.getLongitude(), Toast.LENGTH_SHORT).show();
+                gotoLocation(location.getLatitude(), location.getLongitude(), 15);
+            }
+        };
+
+        LocationRequest request = LocationRequest.create();
+        request.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        request.setInterval(60000);
+        request.setFastestInterval(30000);
+        LocationServices.FusedLocationApi.requestLocationUpdates(
+                mLocationClient, request, mListener
+        );
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        LocationServices.FusedLocationApi.removeLocationUpdates(
+                mLocationClient, mListener
+        );
+    }
 }
