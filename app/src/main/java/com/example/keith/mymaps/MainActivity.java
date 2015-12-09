@@ -1,6 +1,7 @@
 package com.example.keith.mymaps;
 
 import android.app.Dialog;
+import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
@@ -30,11 +31,21 @@ import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polygon;
+import com.google.android.gms.maps.model.PolygonOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -45,9 +56,19 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     private static final double
             IADT_LAT = 53.280349,
             IADT_LNG = -6.153121;
-
     private GoogleApiClient mLocationClient;
     private com.google.android.gms.location.LocationListener mListener;
+    private Marker marker, marker1, marker2;
+    private Polyline line;
+    //private Polygon shape;
+
+    private static final int POLYGON_POINTS = 3;
+    List<Marker> markers = new ArrayList<>();
+
+    Circle shape;
+
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,6 +167,93 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
                     getSupportFragmentManager().findFragmentById(R.id.map);
             mMap = mapFragment.getMap();
         }
+
+        if (mMap != null) {
+            mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
+                @Override
+                public View getInfoWindow(Marker marker) {
+                    return null;
+                }
+
+                @Override
+                public View getInfoContents(Marker marker) {
+                    View v = getLayoutInflater().inflate(R.layout.info_window, null);
+                    TextView tvLocality = (TextView) v.findViewById(R.id.tvLocality);
+                    TextView tvLat = (TextView) v.findViewById(R.id.tvLat);
+                    TextView tvLng = (TextView) v.findViewById(R.id.tvLng);
+                    TextView tvSnippet = (TextView) v.findViewById(R.id.tvSnippet);
+
+                    LatLng latLng = marker.getPosition();
+                    tvLocality.setText(marker.getTitle());
+                    tvLat.setText("Latitude: " + latLng.latitude);
+                    tvLng.setText("Longitude: " + latLng.longitude);
+                    tvSnippet.setText(marker.getSnippet());
+
+                    return v;
+                }
+            });
+
+            mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
+                @Override
+                public void onMapLongClick(LatLng latLng) {
+                    Geocoder gc = new Geocoder(MainActivity.this);
+                    List<Address> list = null;
+
+                    try {
+                        list = gc.getFromLocation(latLng.latitude, latLng.longitude, 1);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        return;
+                    }
+
+                    Address add = list.get(0);
+                    MainActivity.this.addMarker(add, latLng.latitude, latLng.longitude);
+                }
+            });
+
+            mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+                @Override
+                public boolean onMarkerClick(Marker marker) {
+                    String msg = marker.getTitle() + " (" +
+                            marker.getPosition().latitude + ", " +
+                            marker.getPosition().longitude + ")";
+                    Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+            });
+        }
+
+        mMap.setOnMarkerDragListener(new GoogleMap.OnMarkerDragListener() {
+
+            @Override
+            public void onMarkerDragStart(Marker marker) {
+
+            }
+
+            @Override
+            public void onMarkerDrag(Marker marker) {
+
+            }
+
+            @Override
+            public void onMarkerDragEnd(Marker marker) {
+                Geocoder gc = new Geocoder(MainActivity.this);
+                List<Address> list = null;
+                LatLng ll = marker.getPosition();
+                try {
+                    list = gc.getFromLocation(ll.latitude, ll.longitude, 1);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    return;
+                }
+
+                Address add = list.get(0);
+                marker.setTitle(add.getLocality());
+                marker.setSnippet(add.getCountryName());
+                marker.showInfoWindow();
+            }
+        });
+
         return (mMap != null);
     }
 
@@ -179,9 +287,122 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
             double lat = add.getLatitude();
             double lng = add.getLongitude();
             gotoLocation(lat, lng, 20);
+
+            if (marker1!= null) {
+                marker1.remove();
+            }
+
+            addMarker(add, lat, lng);
+        }
+    }
+
+    private void addMarker(Address add, double lat, double lng) {
+
+        if (marker != null) {
+            removeEverything();
         }
 
+        ///////////////////////////
+        //Default marker options//
+        /////////////////////////
+        LatLng latLng = new LatLng(lat, lng);
+        MarkerOptions options = new MarkerOptions()
+                .title(add.getLocality())
+                .position(latLng)
+                .draggable(true)
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET));
+                //.icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_map_marker));
+
+        String country = add.getCountryName();
+        if (country.length() > 0) {
+            options.snippet(country);
+        }
+
+        ////////////////////////////////////
+        //This is for drawing Marker Lines//
+        ///////////////////////////////////
+//        if (marker1 == null) {
+//            marker1 = mMap.addMarker(options);
+//        } else if (marker2 == null) {
+//            marker2 = mMap.addMarker(options);
+//            drawLine();
+//        } else {
+//            removeEverything();
+//            marker1 = mMap.addMarker(options);
+//        }
+
+        marker = mMap.addMarker(options);
+
+        ///////////////////////////////////////
+        //This is for drawing Marker Polygons//
+        //////////////////////////////////////
+//        if (markers.size() == POLYGON_POINTS) {
+//            drawPolygon();
+//        }
+
+        CircleOptions circleOptions = new CircleOptions()
+                .strokeColor(Color.BLUE)
+                .strokeWidth(3)
+                .fillColor(0x330000FF)
+                .center(latLng)
+                .radius(100);
+        shape = mMap.addCircle(circleOptions);
     }
+
+//    private void drawLine() {
+//        PolylineOptions lineOptions = new PolylineOptions()
+//                .add(marker1.getPosition())
+//                .add(marker2.getPosition());
+//        line = mMap.addPolyline(lineOptions);
+//    }
+//
+//    private void drawPolygon() {
+//        PolygonOptions options = new PolygonOptions()
+//                .fillColor(0x330000FF)
+//                .strokeWidth(3)
+//                .strokeColor(Color.BLUE);
+//        for (int i = 0; i < POLYGON_POINTS; i++) {
+//            options.add(markers.get(i).getPosition());
+//        }
+//
+//        shape = mMap.addPolygon(options);
+//
+//    }
+
+
+    private void removeEverything() {
+
+        ////////////////////////////////////
+        //This is for drawing Marker Lines//
+        ///////////////////////////////////
+//        marker1.remove();
+//        marker1 = null;
+//        marker2.remove();
+//        marker2 = null;
+//        if (line == null) {
+//            line.remove();
+//            line = null;
+//        }
+
+        ///////////////////////////////////////
+        //This is for drawing Marker Polygons//
+        //////////////////////////////////////
+//        for (Marker marker : markers) {
+//            marker.remove();
+//        }
+//        markers.clear();
+//        if (shape != null){
+//            shape.remove();
+//            shape = null;
+//        }
+
+        marker.remove();
+        marker = null;
+
+        shape.remove();
+        shape = null;
+    }
+
 
     public void showCurrentLocation(MenuItem item) {
         Location currentLocation = LocationServices.FusedLocationApi
@@ -203,21 +424,21 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     public void onConnected(Bundle bundle) {
         Toast.makeText(this, "Ready to map!", Toast.LENGTH_SHORT).show();
 
-        mListener = new com.google.android.gms.location.LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                Toast.makeText(MainActivity.this, "Location changed:" + location.getLatitude() + ", " + location.getLongitude(), Toast.LENGTH_SHORT).show();
-                gotoLocation(location.getLatitude(), location.getLongitude(), 15);
-            }
-        };
-
-        LocationRequest request = LocationRequest.create();
-        request.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        request.setInterval(60000);
-        request.setFastestInterval(30000);
-        LocationServices.FusedLocationApi.requestLocationUpdates(
-                mLocationClient, request, mListener
-        );
+//        mListener = new com.google.android.gms.location.LocationListener() {
+//            @Override
+//            public void onLocationChanged(Location location) {
+//                Toast.makeText(MainActivity.this, "Location changed:" + location.getLatitude() + ", " + location.getLongitude(), Toast.LENGTH_SHORT).show();
+//                gotoLocation(location.getLatitude(), location.getLongitude(), 15);
+//            }
+//        };
+//
+//        LocationRequest request = LocationRequest.create();
+//        request.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+//        request.setInterval(60000);
+//        request.setFastestInterval(30000);
+//        LocationServices.FusedLocationApi.requestLocationUpdates(
+//                mLocationClient, request, mListener
+//        );
     }
 
     @Override
@@ -230,11 +451,4 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
 
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        LocationServices.FusedLocationApi.removeLocationUpdates(
-                mLocationClient, mListener
-        );
-    }
 }
